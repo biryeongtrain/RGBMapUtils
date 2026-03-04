@@ -166,11 +166,35 @@ public final class RgbMapShaderPatcher {
                     return 0;
                 }
 
+                bool rgbmap_is_i11_color(ivec3 color255) {
+                    return color255 == rgbmap_lookup[0]
+                            || color255 == rgbmap_lookup[1]
+                            || color255 == rgbmap_lookup[2]
+                            || color255 == rgbmap_lookup[3]
+                            || color255 == rgbmap_lookup[4]
+                            || color255 == rgbmap_lookup[5]
+                            || color255 == rgbmap_lookup[6]
+                            || color255 == rgbmap_lookup[7];
+                }
+
+                bool rgbmap_is_encoded_map(sampler2D samplerTex) {
+                    if (textureSize(samplerTex, 0).xy != ivec2(128, 128)) {
+                        return false;
+                    }
+
+                    return rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(1, 1), 0).rgb * 255.0))
+                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(21, 9), 0).rgb * 255.0))
+                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(41, 27), 0).rgb * 255.0))
+                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(63, 45), 0).rgb * 255.0))
+                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(85, 69), 0).rgb * 255.0))
+                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(109, 95), 0).rgb * 255.0));
+                }
+
                 vec4 rgbmap_decode_sample(sampler2D samplerTex, vec2 uv) {
                     vec4 sampled = texture(samplerTex, uv);
                     ivec2 texSize = textureSize(samplerTex, 0).xy;
 
-                    if (texSize == ivec2(128, 128)) {
+                    if (texSize == ivec2(128, 128) && rgbmap_is_encoded_map(samplerTex)) {
                         ivec2 coord = (ivec2(floor(uv * vec2(texSize))) / 2) * 2;
                         int b1 = rgbmap_decode7u(texelFetch(samplerTex, coord, 0).rgb);
                         int b2 = rgbmap_decode7u(texelFetch(samplerTex, coord + ivec2(1, 0), 0).rgb);

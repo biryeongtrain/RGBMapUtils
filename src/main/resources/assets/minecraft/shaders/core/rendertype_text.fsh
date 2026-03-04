@@ -64,10 +64,34 @@ int decode7u(vec3 color) {
     return 0;
 }
 
+bool isI11Color(ivec3 color255) {
+    return color255 == lookup[0]
+            || color255 == lookup[1]
+            || color255 == lookup[2]
+            || color255 == lookup[3]
+            || color255 == lookup[4]
+            || color255 == lookup[5]
+            || color255 == lookup[6]
+            || color255 == lookup[7];
+}
+
+bool isRgbMapEncoded(sampler2D samplerTex) {
+    if (textureSize(samplerTex, 0).xy != ivec2(128, 128)) {
+        return false;
+    }
+
+    return isI11Color(ivec3(texelFetch(samplerTex, ivec2(1, 1), 0).rgb * 255.0))
+            && isI11Color(ivec3(texelFetch(samplerTex, ivec2(21, 9), 0).rgb * 255.0))
+            && isI11Color(ivec3(texelFetch(samplerTex, ivec2(41, 27), 0).rgb * 255.0))
+            && isI11Color(ivec3(texelFetch(samplerTex, ivec2(63, 45), 0).rgb * 255.0))
+            && isI11Color(ivec3(texelFetch(samplerTex, ivec2(85, 69), 0).rgb * 255.0))
+            && isI11Color(ivec3(texelFetch(samplerTex, ivec2(109, 95), 0).rgb * 255.0));
+}
+
 void main() {
     vec4 color = texture(Sampler0, texCoord0);
     ivec2 texSize = textureSize(Sampler0, 0).xy;
-    if (texSize == ivec2(128, 128)) {
+    if (texSize == ivec2(128, 128) && isRgbMapEncoded(Sampler0)) {
         ivec2 coord = (ivec2(floor(texCoord0 * vec2(texSize))) / 2) * 2;
         int b1 = decode7u(texelFetch(Sampler0, coord, 0).rgb);
         int b2 = decode7u(texelFetch(Sampler0, coord + ivec2(1, 0), 0).rgb);
