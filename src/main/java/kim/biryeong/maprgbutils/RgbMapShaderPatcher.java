@@ -156,46 +156,128 @@ public final class RgbMapShaderPatcher {
                 );
 
                 int rgbmap_decode7u(vec3 color) {
-                    ivec3 d = ivec3(color * 255.0);
+                    vec3 c = color * 255.0;
+                    int bestIndex = 0;
+                    float bestDistance = 1e20;
+
                     for (int i = 0; i < 128; i++) {
-                        if (rgbmap_lookup[i] == d) {
-                            return i;
+                        vec3 diff = c - vec3(rgbmap_lookup[i]);
+                        float distance = dot(diff, diff);
+                        if (distance < bestDistance) {
+                            bestDistance = distance;
+                            bestIndex = i;
                         }
                     }
 
-                    return 0;
+                    return bestIndex;
                 }
 
-                bool rgbmap_is_i11_color(ivec3 color255) {
-                    return color255 == rgbmap_lookup[0]
-                            || color255 == rgbmap_lookup[1]
-                            || color255 == rgbmap_lookup[2]
-                            || color255 == rgbmap_lookup[3]
-                            || color255 == rgbmap_lookup[4]
-                            || color255 == rgbmap_lookup[5]
-                            || color255 == rgbmap_lookup[6]
-                            || color255 == rgbmap_lookup[7];
-                }
-
-                bool rgbmap_is_encoded_map(sampler2D samplerTex) {
-                    if (textureSize(samplerTex, 0).xy != ivec2(128, 128)) {
+                bool rgbmap_is_near_i11(vec4 sampledColor, float maxDistance) {
+                    if (sampledColor.a < 0.99) {
                         return false;
                     }
 
-                    return rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(1, 1), 0).rgb * 255.0))
-                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(21, 9), 0).rgb * 255.0))
-                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(41, 27), 0).rgb * 255.0))
-                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(63, 45), 0).rgb * 255.0))
-                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(85, 69), 0).rgb * 255.0))
-                            && rgbmap_is_i11_color(ivec3(texelFetch(samplerTex, ivec2(109, 95), 0).rgb * 255.0));
+                    vec3 c = sampledColor.rgb * 255.0;
+                    int bestIndex = 0;
+                    float bestDistance = 1e20;
+
+                    for (int i = 0; i < 8; i++) {
+                        vec3 diff = c - vec3(rgbmap_lookup[i]);
+                        float distance = dot(diff, diff);
+                        if (distance < bestDistance) {
+                            bestDistance = distance;
+                            bestIndex = i;
+                        }
+                    }
+
+                    return bestIndex < 8 && bestDistance <= maxDistance;
+                }
+
+                int rgbmap_i11_score(sampler2D samplerTex, ivec2 origin, ivec2 texSize, float maxDistance) {
+                    ivec2 minCoord = ivec2(0);
+                    ivec2 maxOrigin = texSize - ivec2(2);
+                    ivec2 o0 = clamp(origin, minCoord, maxOrigin);
+                    ivec2 o1 = clamp(origin + ivec2(2, 0), minCoord, maxOrigin);
+                    ivec2 o2 = clamp(origin + ivec2(0, 2), minCoord, maxOrigin);
+
+                    int score = 0;
+                    score += rgbmap_is_near_i11(texelFetch(samplerTex, o0 + ivec2(1, 1), 0), maxDistance) ? 1 : 0;
+                    score += rgbmap_is_near_i11(texelFetch(samplerTex, o1 + ivec2(1, 1), 0), maxDistance) ? 1 : 0;
+                    score += rgbmap_is_near_i11(texelFetch(samplerTex, o2 + ivec2(1, 1), 0), maxDistance) ? 1 : 0;
+                    return score;
+                }
+
+                bool rgbmap_find_block_origin(sampler2D samplerTex, ivec2 pixel, ivec2 texSize, out ivec2 originOut) {
+                    if (texSize.x < 2 || texSize.y < 2) {
+                        return false;
+                    }
+
+                    int originEvenX = pixel.x - (pixel.x & 1);
+                    int originOddX = pixel.x - ((pixel.x + 1) & 1);
+                    int originEvenY = pixel.y - (pixel.y & 1);
+                    int originOddY = pixel.y - ((pixel.y + 1) & 1);
+
+                    ivec2 candidate0 = ivec2(originEvenX, originEvenY);
+                    ivec2 candidate1 = ivec2(originOddX, originEvenY);
+                    ivec2 candidate2 = ivec2(originEvenX, originOddY);
+                    ivec2 candidate3 = ivec2(originOddX, originOddY);
+
+                    int bestScore = -1;
+                    ivec2 bestOrigin = candidate0;
+
+                    int score0 = rgbmap_i11_score(samplerTex, candidate0, texSize, 256.0);
+                    if (score0 > bestScore) {
+                        bestScore = score0;
+                        bestOrigin = candidate0;
+                    }
+
+                    int score1 = rgbmap_i11_score(samplerTex, candidate1, texSize, 256.0);
+                    if (score1 > bestScore) {
+                        bestScore = score1;
+                        bestOrigin = candidate1;
+                    }
+
+                    int score2 = rgbmap_i11_score(samplerTex, candidate2, texSize, 256.0);
+                    if (score2 > bestScore) {
+                        bestScore = score2;
+                        bestOrigin = candidate2;
+                    }
+
+                    int score3 = rgbmap_i11_score(samplerTex, candidate3, texSize, 256.0);
+                    if (score3 > bestScore) {
+                        bestScore = score3;
+                        bestOrigin = candidate3;
+                    }
+
+                    if (bestScore < 3) {
+                        return false;
+                    }
+
+                    originOut = clamp(bestOrigin, ivec2(0), texSize - ivec2(2));
+                    return true;
+                }
+
+                bool rgbmap_is_encoded_map(sampler2D samplerTex) {
+                    ivec2 texSize = textureSize(samplerTex, 0).xy;
+                    if (texSize.x < 2 || texSize.y < 2) {
+                        return false;
+                    }
+
+                    ivec2 center = clamp(texSize / 2, ivec2(0), texSize - ivec2(1));
+                    ivec2 origin;
+                    return rgbmap_find_block_origin(samplerTex, center, texSize, origin);
                 }
 
                 vec4 rgbmap_decode_sample(sampler2D samplerTex, vec2 uv) {
                     vec4 sampled = texture(samplerTex, uv);
                     ivec2 texSize = textureSize(samplerTex, 0).xy;
 
-                    if (texSize == ivec2(128, 128) && rgbmap_is_encoded_map(samplerTex)) {
-                        ivec2 coord = (ivec2(floor(uv * vec2(texSize))) / 2) * 2;
+                    if (rgbmap_is_encoded_map(samplerTex)) {
+                        ivec2 pixel = ivec2(floor(uv * vec2(texSize)));
+                        ivec2 coord;
+                        if (!rgbmap_find_block_origin(samplerTex, pixel, texSize, coord)) {
+                            return sampled;
+                        }
                         int b1 = rgbmap_decode7u(texelFetch(samplerTex, coord, 0).rgb);
                         int b2 = rgbmap_decode7u(texelFetch(samplerTex, coord + ivec2(1, 0), 0).rgb);
                         int b3 = rgbmap_decode7u(texelFetch(samplerTex, coord + ivec2(0, 1), 0).rgb);

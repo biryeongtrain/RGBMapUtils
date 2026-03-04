@@ -2,7 +2,6 @@ package kim.biryeong.maprgbutils;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import eu.pb4.mapcanvas.api.core.CanvasImage;
 import eu.pb4.mapcanvas.api.core.CombinedPlayerCanvas;
 import eu.pb4.mapcanvas.api.core.DrawableCanvas;
 import eu.pb4.mapcanvas.api.utils.CanvasUtils;
@@ -63,13 +62,13 @@ public final class RgbMapDebugCommand {
         }
 
         CombinedPlayerCanvas rawCanvas = createRawCanvas(sourceImage);
-        CombinedPlayerCanvas encodedCanvas = createEncodedCanvas(sourceImage);
+        CombinedPlayerCanvas encodedCanvas = RgbMapCanvasAdapter.encodeImageToRgbMapCombinedCanvas(sourceImage, CODEC);
         DisplayPlacement placement = resolveDisplayPlacement(player);
 
         int rawSectionsX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.MAP_WIDTH);
         int rawSectionsY = sectionsFor(sourceImage.getHeight(), RgbMapCodec.MAP_HEIGHT);
-        int encodedSectionsX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.RGB_WIDTH);
-        int encodedSectionsY = sectionsFor(sourceImage.getHeight(), RgbMapCodec.RGB_HEIGHT);
+        int encodedSectionsX = encodedCanvas.getSectionsWidth();
+        int encodedSectionsY = encodedCanvas.getSectionsHeight();
 
         BlockPos encodedPos = placement.pos().relative(sideDirection(placement.direction()), rawSectionsX + DISPLAY_GAP);
 
@@ -78,8 +77,8 @@ public final class RgbMapDebugCommand {
         encodedCanvas.addPlayer(player);
         encodedCanvas.sendUpdates();
 
-        VirtualDisplay rawDisplay = VirtualDisplay.builder(rawCanvas, placement.pos(), placement.direction()).invisible().build();
-        VirtualDisplay encodedDisplay = VirtualDisplay.builder(encodedCanvas, encodedPos, placement.direction()).invisible().build();
+        VirtualDisplay rawDisplay = VirtualDisplay.builder(rawCanvas, placement.pos(), placement.direction()).glowing().invisible().build();
+        VirtualDisplay encodedDisplay = VirtualDisplay.builder(encodedCanvas, encodedPos, placement.direction()).glowing().invisible().build();
         rawDisplay.addPlayer(player);
         encodedDisplay.addPlayer(player);
 
@@ -122,54 +121,14 @@ public final class RgbMapDebugCommand {
         return true;
     }
 
-    private static CombinedPlayerCanvas createEncodedCanvas(BufferedImage sourceImage) {
-        int tilesX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.RGB_WIDTH);
-        int tilesY = sectionsFor(sourceImage.getHeight(), RgbMapCodec.RGB_HEIGHT);
-        CombinedPlayerCanvas combinedCanvas = DrawableCanvas.create(tilesX, tilesY);
-
-        for (int tileY = 0; tileY < tilesY; tileY++) {
-            for (int tileX = 0; tileX < tilesX; tileX++) {
-                BufferedImage tileImage = extractTile64x64(sourceImage, tileX * RgbMapCodec.RGB_WIDTH, tileY * RgbMapCodec.RGB_HEIGHT);
-                int[] mapIndexes = CODEC.encodeImageToMapIndexes(tileImage);
-                CanvasImage encodedTile = RgbMapCanvasAdapter.mapIndexesToDrawableCanvas(mapIndexes);
-                CanvasUtils.draw(
-                        combinedCanvas,
-                        tileX * RgbMapCodec.MAP_WIDTH,
-                        tileY * RgbMapCodec.MAP_HEIGHT,
-                        encodedTile
-                );
-            }
-        }
-
-        return combinedCanvas;
-    }
-
     private static CombinedPlayerCanvas createRawCanvas(BufferedImage sourceImage) {
         int tilesX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.MAP_WIDTH);
         int tilesY = sectionsFor(sourceImage.getHeight(), RgbMapCodec.MAP_HEIGHT);
         CombinedPlayerCanvas combinedCanvas = DrawableCanvas.create(tilesX, tilesY);
 
-        CanvasImage rawImage = CanvasImage.from(sourceImage);
+        DrawableCanvas rawImage = RgbMapCanvasAdapter.bufferedImageToDrawableCanvas(sourceImage);
         CanvasUtils.draw(combinedCanvas, 0, 0, rawImage);
         return combinedCanvas;
-    }
-
-    private static BufferedImage extractTile64x64(BufferedImage sourceImage, int sourceStartX, int sourceStartY) {
-        BufferedImage tile = new BufferedImage(RgbMapCodec.RGB_WIDTH, RgbMapCodec.RGB_HEIGHT, BufferedImage.TYPE_INT_RGB);
-
-        for (int y = 0; y < RgbMapCodec.RGB_HEIGHT; y++) {
-            for (int x = 0; x < RgbMapCodec.RGB_WIDTH; x++) {
-                int sourceX = sourceStartX + x;
-                int sourceY = sourceStartY + y;
-                int rgb = 0;
-                if (sourceX >= 0 && sourceX < sourceImage.getWidth() && sourceY >= 0 && sourceY < sourceImage.getHeight()) {
-                    rgb = sourceImage.getRGB(sourceX, sourceY);
-                }
-                tile.setRGB(x, y, rgb);
-            }
-        }
-
-        return tile;
     }
 
     private static DisplayPlacement resolveDisplayPlacement(ServerPlayer player) {

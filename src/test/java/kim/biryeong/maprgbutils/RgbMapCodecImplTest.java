@@ -1,6 +1,8 @@
 package kim.biryeong.maprgbutils;
 
 import eu.pb4.mapcanvas.api.core.CanvasImage;
+import eu.pb4.mapcanvas.api.core.CombinedPlayerCanvas;
+import eu.pb4.mapcanvas.api.core.DrawableCanvas;
 import org.junit.jupiter.api.Test;
 
 import java.awt.image.BufferedImage;
@@ -8,6 +10,7 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -119,5 +122,77 @@ class RgbMapCodecImplTest {
                 () -> codec.decodeMapIndexesToRgb(invalidIndex)
         );
         assertTrue(range.getMessage().contains("0..127"));
+    }
+
+    @Test
+    void highLevelRgbCanvasApiWorksForImageAndCanvasInput() {
+        BufferedImage image = new BufferedImage(RgbMapCodec.RGB_WIDTH, RgbMapCodec.RGB_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < RgbMapCodec.RGB_HEIGHT; y++) {
+            for (int x = 0; x < RgbMapCodec.RGB_WIDTH; x++) {
+                int r = (x * 5) & 0xFF;
+                int g = (y * 3) & 0xFF;
+                int b = (x + y) & 0xFF;
+                image.setRGB(x, y, (r << 16) | (g << 8) | b);
+            }
+        }
+
+        CanvasImage encodedFromImage = RgbMapCanvasAdapter.encodeImageToRgbMapCanvas(image, codec);
+        int[] mapIndexesFromImage = RgbMapCanvasAdapter.drawableCanvasToMapIndexes(encodedFromImage);
+        BufferedImage decoded = codec.decodeMapIndexesToImage(mapIndexesFromImage);
+        for (int y = 0; y < RgbMapCodec.RGB_HEIGHT; y++) {
+            for (int x = 0; x < RgbMapCodec.RGB_WIDTH; x++) {
+                assertEquals(image.getRGB(x, y) & 0x00FFFFFF, decoded.getRGB(x, y) & 0x00FFFFFF);
+            }
+        }
+
+        CanvasImage sourceCanvas = CanvasImage.from(image);
+        CanvasImage encodedFromCanvas = RgbMapCanvasAdapter.encodeCanvasToRgbMapCanvas(sourceCanvas, codec);
+        CanvasImage encodedFromCanvasImage = RgbMapCanvasAdapter.encodeImageToRgbMapCanvas(
+                RgbMapCanvasAdapter.drawableCanvasToBufferedImage(sourceCanvas),
+                codec
+        );
+        int[] mapIndexesFromCanvas = RgbMapCanvasAdapter.drawableCanvasToMapIndexes(encodedFromCanvas);
+        int[] mapIndexesFromCanvasImage = RgbMapCanvasAdapter.drawableCanvasToMapIndexes(encodedFromCanvasImage);
+        assertArrayEquals(mapIndexesFromCanvasImage, mapIndexesFromCanvas);
+    }
+
+    @Test
+    void highLevelRgbCombinedCanvasApiWorksForImageAndCanvasInput() {
+        BufferedImage image = new BufferedImage(257, 129, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int r = (x * 7) & 0xFF;
+                int g = (y * 11) & 0xFF;
+                int b = (x ^ y) & 0xFF;
+                image.setRGB(x, y, (r << 16) | (g << 8) | b);
+            }
+        }
+
+        CombinedPlayerCanvas encodedFromImage = RgbMapCanvasAdapter.encodeImageToRgbMapCombinedCanvas(image, codec);
+        CanvasImage sourceCanvas = CanvasImage.from(image);
+        CombinedPlayerCanvas encodedFromCanvas = RgbMapCanvasAdapter.encodeCanvasToRgbMapCombinedCanvas(sourceCanvas, codec);
+        CombinedPlayerCanvas encodedFromCanvasImage = RgbMapCanvasAdapter.encodeImageToRgbMapCombinedCanvas(
+                RgbMapCanvasAdapter.drawableCanvasToBufferedImage(sourceCanvas),
+                codec
+        );
+        try {
+            assertEquals(3, encodedFromImage.getSectionsWidth());
+            assertEquals(2, encodedFromImage.getSectionsHeight());
+            assertEquals(encodedFromImage.getSectionsWidth(), encodedFromCanvas.getSectionsWidth());
+            assertEquals(encodedFromImage.getSectionsHeight(), encodedFromCanvas.getSectionsHeight());
+
+            DrawableCanvas imageTile = encodedFromCanvasImage.getSubCanvas(0, 0);
+            DrawableCanvas canvasTile = encodedFromCanvas.getSubCanvas(0, 0);
+            assertNotNull(imageTile);
+            assertNotNull(canvasTile);
+            assertArrayEquals(
+                    RgbMapCanvasAdapter.drawableCanvasToMapIndexes(imageTile),
+                    RgbMapCanvasAdapter.drawableCanvasToMapIndexes(canvasTile)
+            );
+        } finally {
+            encodedFromImage.destroy();
+            encodedFromCanvas.destroy();
+            encodedFromCanvasImage.destroy();
+        }
     }
 }
