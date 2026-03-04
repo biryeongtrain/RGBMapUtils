@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "rgbmaplibs",
+  "version": "${version}",
+  "name": "RGBMapLibs",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/rgbmaplibs/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "kim.biryeong.maprgbutils.ModEntryPoint"
+    ]
+  },
+  "mixins": [
+    "rgbmaplibs.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "rgbmaplibs-gametest",
+  "version": "0.0.0",
+  "name": "RGBMapLibs GameTests",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "environment": "server",
+  "entrypoints": {
+    "fabric-gametest": [
+      "kim.biryeong.maprgbutils.gametest.RgbMapCodecGameTest"
+    ]
+  }
+}
