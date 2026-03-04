@@ -3,24 +3,36 @@ package kim.biryeong.maprgbutils;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.pb4.mapcanvas.api.core.CanvasImage;
+import eu.pb4.mapcanvas.api.core.CombinedPlayerCanvas;
 import eu.pb4.mapcanvas.api.core.DrawableCanvas;
-import eu.pb4.mapcanvas.api.core.PlayerCanvas;
 import eu.pb4.mapcanvas.api.utils.CanvasUtils;
+import eu.pb4.mapcanvas.api.utils.VirtualDisplay;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class RgbMapDebugCommand {
-    private static final Map<UUID, PlayerCanvas> ACTIVE_CANVASES = new ConcurrentHashMap<>();
+    private static final String DEBUG_IMAGE_RESOURCE = "img.png";
+    private static final double DISPLAY_PICK_DISTANCE = 32.0D;
+    private static final int DISPLAY_FALLBACK_DISTANCE = 3;
+    private static final int DISPLAY_GAP = 1;
+
+    private static final Map<UUID, ActiveDebugDisplay> ACTIVE_DISPLAYS = new ConcurrentHashMap<>();
     private static final RgbMapCodec CODEC = RgbMapCodec.createDefault();
 
     private RgbMapDebugCommand() {
@@ -42,25 +54,46 @@ public final class RgbMapDebugCommand {
         ServerPlayer player = source.getPlayerOrException();
         destroyExisting(player.getUUID());
 
-        BufferedImage debug64x64 = createDebugImage();
-        int[] mapIndexes = CODEC.encodeImageToMapIndexes(debug64x64);
-
-        CanvasImage encodedCanvas = RgbMapCanvasAdapter.mapIndexesToDrawableCanvas(mapIndexes);
-        PlayerCanvas playerCanvas = DrawableCanvas.create();
-        CanvasUtils.draw(playerCanvas, 0, 0, encodedCanvas);
-
-        playerCanvas.addPlayer(player);
-        playerCanvas.sendUpdates();
-
-        ItemStack mapItem = playerCanvas.asStack();
-        if (!player.addItem(mapItem)) {
-            player.drop(mapItem, false);
+        BufferedImage sourceImage;
+        try {
+            sourceImage = loadDebugImage();
+        } catch (IllegalStateException exception) {
+            source.sendFailure(Component.literal(exception.getMessage()));
+            return 0;
         }
 
-        ACTIVE_CANVASES.put(player.getUUID(), playerCanvas);
+        CombinedPlayerCanvas rawCanvas = createRawCanvas(sourceImage);
+        CombinedPlayerCanvas encodedCanvas = createEncodedCanvas(sourceImage);
+        DisplayPlacement placement = resolveDisplayPlacement(player);
+
+        int rawSectionsX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.MAP_WIDTH);
+        int rawSectionsY = sectionsFor(sourceImage.getHeight(), RgbMapCodec.MAP_HEIGHT);
+        int encodedSectionsX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.RGB_WIDTH);
+        int encodedSectionsY = sectionsFor(sourceImage.getHeight(), RgbMapCodec.RGB_HEIGHT);
+
+        BlockPos encodedPos = placement.pos().relative(sideDirection(placement.direction()), rawSectionsX + DISPLAY_GAP);
+
+        rawCanvas.addPlayer(player);
+        rawCanvas.sendUpdates();
+        encodedCanvas.addPlayer(player);
+        encodedCanvas.sendUpdates();
+
+        VirtualDisplay rawDisplay = VirtualDisplay.builder(rawCanvas, placement.pos(), placement.direction()).invisible().build();
+        VirtualDisplay encodedDisplay = VirtualDisplay.builder(encodedCanvas, encodedPos, placement.direction()).invisible().build();
+        rawDisplay.addPlayer(player);
+        encodedDisplay.addPlayer(player);
+
+        ACTIVE_DISPLAYS.put(player.getUUID(), new ActiveDebugDisplay(rawCanvas, encodedCanvas, rawDisplay, encodedDisplay));
 
         source.sendSuccess(
-                () -> Component.literal("rgbmapdebug map created (id=" + playerCanvas.getId() + "). Hold the map item to view the encoded canvas."),
+                () -> Component.literal(
+                        "rgbmapdebug displays created: image="
+                                + sourceImage.getWidth() + "x" + sourceImage.getHeight()
+                                + ", rawMaps=" + rawSectionsX + "x" + rawSectionsY
+                                + ", encodedMaps=" + encodedSectionsX + "x" + encodedSectionsY
+                                + ", facing=" + placement.direction()
+                                + ". Use /rgbmapdebug clear to remove."
+                ),
                 false
         );
 
@@ -72,35 +105,129 @@ public final class RgbMapDebugCommand {
         boolean removed = destroyExisting(player.getUUID());
 
         if (removed) {
-            source.sendSuccess(() -> Component.literal("rgbmapdebug canvas cleared."), false);
+            source.sendSuccess(() -> Component.literal("rgbmapdebug display cleared."), false);
         } else {
-            source.sendFailure(Component.literal("No active rgbmapdebug canvas found for this player."));
+            source.sendFailure(Component.literal("No active rgbmapdebug display found for this player."));
         }
 
         return Command.SINGLE_SUCCESS;
     }
 
     private static boolean destroyExisting(UUID playerUuid) {
-        PlayerCanvas previous = ACTIVE_CANVASES.remove(playerUuid);
+        ActiveDebugDisplay previous = ACTIVE_DISPLAYS.remove(playerUuid);
         if (previous == null) {
             return false;
         }
-        previous.destroy();
+        previous.destroyAll();
         return true;
     }
 
-    private static BufferedImage createDebugImage() {
-        BufferedImage image = new BufferedImage(RgbMapCodec.RGB_WIDTH, RgbMapCodec.RGB_HEIGHT, BufferedImage.TYPE_INT_RGB);
+    private static CombinedPlayerCanvas createEncodedCanvas(BufferedImage sourceImage) {
+        int tilesX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.RGB_WIDTH);
+        int tilesY = sectionsFor(sourceImage.getHeight(), RgbMapCodec.RGB_HEIGHT);
+        CombinedPlayerCanvas combinedCanvas = DrawableCanvas.create(tilesX, tilesY);
 
-        for (int y = 0; y < RgbMapCodec.RGB_HEIGHT; y++) {
-            for (int x = 0; x < RgbMapCodec.RGB_WIDTH; x++) {
-                int r = (x * 4) & 0xFF;
-                int g = (y * 4) & 0xFF;
-                int b = ((x * 3) ^ (y * 5)) & 0xFF;
-                image.setRGB(x, y, (r << 16) | (g << 8) | b);
+        for (int tileY = 0; tileY < tilesY; tileY++) {
+            for (int tileX = 0; tileX < tilesX; tileX++) {
+                BufferedImage tileImage = extractTile64x64(sourceImage, tileX * RgbMapCodec.RGB_WIDTH, tileY * RgbMapCodec.RGB_HEIGHT);
+                int[] mapIndexes = CODEC.encodeImageToMapIndexes(tileImage);
+                CanvasImage encodedTile = RgbMapCanvasAdapter.mapIndexesToDrawableCanvas(mapIndexes);
+                CanvasUtils.draw(
+                        combinedCanvas,
+                        tileX * RgbMapCodec.MAP_WIDTH,
+                        tileY * RgbMapCodec.MAP_HEIGHT,
+                        encodedTile
+                );
             }
         }
 
+        return combinedCanvas;
+    }
+
+    private static CombinedPlayerCanvas createRawCanvas(BufferedImage sourceImage) {
+        int tilesX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.MAP_WIDTH);
+        int tilesY = sectionsFor(sourceImage.getHeight(), RgbMapCodec.MAP_HEIGHT);
+        CombinedPlayerCanvas combinedCanvas = DrawableCanvas.create(tilesX, tilesY);
+
+        CanvasImage rawImage = CanvasImage.from(sourceImage);
+        CanvasUtils.draw(combinedCanvas, 0, 0, rawImage);
+        return combinedCanvas;
+    }
+
+    private static BufferedImage extractTile64x64(BufferedImage sourceImage, int sourceStartX, int sourceStartY) {
+        BufferedImage tile = new BufferedImage(RgbMapCodec.RGB_WIDTH, RgbMapCodec.RGB_HEIGHT, BufferedImage.TYPE_INT_RGB);
+
+        for (int y = 0; y < RgbMapCodec.RGB_HEIGHT; y++) {
+            for (int x = 0; x < RgbMapCodec.RGB_WIDTH; x++) {
+                int sourceX = sourceStartX + x;
+                int sourceY = sourceStartY + y;
+                int rgb = 0;
+                if (sourceX >= 0 && sourceX < sourceImage.getWidth() && sourceY >= 0 && sourceY < sourceImage.getHeight()) {
+                    rgb = sourceImage.getRGB(sourceX, sourceY);
+                }
+                tile.setRGB(x, y, rgb);
+            }
+        }
+
+        return tile;
+    }
+
+    private static DisplayPlacement resolveDisplayPlacement(ServerPlayer player) {
+        HitResult hitResult = player.pick(DISPLAY_PICK_DISTANCE, 0.0F, false);
+        if (hitResult.getType() == HitResult.Type.BLOCK && hitResult instanceof BlockHitResult blockHitResult) {
+            Direction direction = blockHitResult.getDirection();
+            BlockPos pos = blockHitResult.getBlockPos().relative(direction);
+            return new DisplayPlacement(pos, direction);
+        }
+
+        Direction lookDirection = player.getDirection();
+        BlockPos fallbackPos = player.blockPosition().relative(lookDirection, DISPLAY_FALLBACK_DISTANCE);
+        return new DisplayPlacement(fallbackPos, lookDirection.getOpposite());
+    }
+
+    private static int sectionsFor(int size, int tileSize) {
+        return Math.max(1, (size + tileSize - 1) / tileSize);
+    }
+
+    private static Direction sideDirection(Direction facing) {
+        if (facing.getAxis() == Direction.Axis.Y) {
+            return Direction.EAST;
+        }
+        return facing.getCounterClockWise();
+    }
+
+    private static BufferedImage loadDebugImage() {
+        BufferedImage image;
+        try (InputStream inputStream = RgbMapDebugCommand.class.getClassLoader().getResourceAsStream(DEBUG_IMAGE_RESOURCE)) {
+            if (inputStream == null) {
+                throw new IllegalStateException("Missing debug image resource: " + DEBUG_IMAGE_RESOURCE);
+            }
+            image = ImageIO.read(inputStream);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read debug image resource: " + DEBUG_IMAGE_RESOURCE, exception);
+        }
+
+        if (image == null) {
+            throw new IllegalStateException("Unsupported debug image format: " + DEBUG_IMAGE_RESOURCE);
+        }
+
         return image;
+    }
+
+    private record ActiveDebugDisplay(
+            CombinedPlayerCanvas rawCanvas,
+            CombinedPlayerCanvas encodedCanvas,
+            VirtualDisplay rawDisplay,
+            VirtualDisplay encodedDisplay
+    ) {
+        private void destroyAll() {
+            rawDisplay.destroy();
+            encodedDisplay.destroy();
+            rawCanvas.destroy();
+            encodedCanvas.destroy();
+        }
+    }
+
+    private record DisplayPlacement(BlockPos pos, Direction direction) {
     }
 }

@@ -8,6 +8,8 @@ import java.awt.image.BufferedImage;
 import java.util.Locale;
 
 public final class RgbMapCanvasAdapter {
+    private static final int MAP_COLOR_OFFSET = 4;
+
     private RgbMapCanvasAdapter() {
     }
 
@@ -19,7 +21,7 @@ public final class RgbMapCanvasAdapter {
         for (int y = 0; y < RgbMapCodec.MAP_HEIGHT; y++) {
             for (int x = 0; x < RgbMapCodec.MAP_WIDTH; x++) {
                 int index = RgbMapValidation.requireMapIndexRange(mapIndexes128x128[i], x, y, "mapIndexes128x128");
-                canvas.setRaw(x, y, (byte) index);
+                canvas.setRaw(x, y, (byte) (index + MAP_COLOR_OFFSET));
                 i++;
             }
         }
@@ -33,8 +35,9 @@ public final class RgbMapCanvasAdapter {
         int i = 0;
         for (int y = 0; y < RgbMapCodec.MAP_HEIGHT; y++) {
             for (int x = 0; x < RgbMapCodec.MAP_WIDTH; x++) {
-                int value = Byte.toUnsignedInt(canvas128x128.getRaw(x, y));
-                out[i++] = RgbMapValidation.requireMapIndexRange(value, x, y, "canvas128x128");
+                int rawValue = Byte.toUnsignedInt(canvas128x128.getRaw(x, y));
+                int mapIndex = rawValue - MAP_COLOR_OFFSET;
+                out[i++] = RgbMapValidation.requireMapIndexRange(mapIndex, x, y, "canvas128x128");
             }
         }
 
