@@ -11,7 +11,7 @@
   "environment": "server",
   "entrypoints": {
     "main": [
-      "kim.biryeong.maprgbutils.ModEntryPoint"
+      "kim.biryeong.maprgbutils.impl.ModEntryPoint"
     ]
   },
   "mixins": [

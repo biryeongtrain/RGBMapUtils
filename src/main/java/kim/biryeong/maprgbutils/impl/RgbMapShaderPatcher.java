@@ -1,7 +1,8 @@
-package kim.biryeong.maprgbutils;
+package kim.biryeong.maprgbutils.impl;
 
 import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
 import eu.pb4.polymer.resourcepack.api.ResourcePackBuilder;
+import kim.biryeong.maprgbutils.api.RgbMapPalette;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

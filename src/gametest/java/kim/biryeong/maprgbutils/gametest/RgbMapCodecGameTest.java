@@ -1,8 +1,8 @@
 package kim.biryeong.maprgbutils.gametest;
 
 import eu.pb4.mapcanvas.api.core.CanvasImage;
-import kim.biryeong.maprgbutils.RgbMapCanvasAdapter;
-import kim.biryeong.maprgbutils.RgbMapCodec;
+import kim.biryeong.maprgbutils.api.RgbMapCanvasAdapter;
+import kim.biryeong.maprgbutils.api.RgbMapCodec;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;

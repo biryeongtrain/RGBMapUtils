@@ -1,4 +1,4 @@
-package kim.biryeong.maprgbutils;
+package kim.biryeong.maprgbutils.impl;
 
 import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
 import net.fabricmc.loader.api.FabricLoader;

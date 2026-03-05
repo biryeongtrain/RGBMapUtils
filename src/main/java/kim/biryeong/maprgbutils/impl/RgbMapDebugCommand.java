@@ -1,4 +1,4 @@
-package kim.biryeong.maprgbutils;
+package kim.biryeong.maprgbutils.impl;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -6,6 +6,9 @@ import eu.pb4.mapcanvas.api.core.CombinedPlayerCanvas;
 import eu.pb4.mapcanvas.api.core.DrawableCanvas;
 import eu.pb4.mapcanvas.api.utils.CanvasUtils;
 import eu.pb4.mapcanvas.api.utils.VirtualDisplay;
+import kim.biryeong.maprgbutils.api.RgbMapCanvasAdapter;
+import kim.biryeong.maprgbutils.api.RgbMapCodec;
+import kim.biryeong.maprgbutils.api.RgbMapCombinedCanvasAdapter;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.core.BlockPos;
@@ -62,7 +65,7 @@ public final class RgbMapDebugCommand {
         }
 
         CombinedPlayerCanvas rawCanvas = createRawCanvas(sourceImage);
-        CombinedPlayerCanvas encodedCanvas = RgbMapCanvasAdapter.encodeImageToRgbMapCombinedCanvas(sourceImage, CODEC);
+        CombinedPlayerCanvas encodedCanvas = RgbMapCombinedCanvasAdapter.encodeImageToRgbMapCombinedCanvas(sourceImage, CODEC);
         DisplayPlacement placement = resolveDisplayPlacement(player);
 
         int rawSectionsX = sectionsFor(sourceImage.getWidth(), RgbMapCodec.MAP_WIDTH);

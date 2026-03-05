@@ -3,10 +3,11 @@
 JNNGL `rgb_maps` 아이디어를 Fabric 모드에서 재사용 가능한 Java 라이브러리로 포팅한 프로젝트입니다.
 
 ## 포함 내용
-- `kim.biryeong.maprgbutils.RgbMapCodec`: 64x64 `0xRRGGBB` <-> 128x128 map index(0..127) 인코딩/디코딩 API
-- `kim.biryeong.maprgbutils.RgbMapCodecImpl`: 참조 구현과 동일한 비트 배치 알고리즘 구현체
-- `kim.biryeong.maprgbutils.RgbMapPalette`: 128개 lookup 팔레트 및 디버그용 RGB 변환
-- `kim.biryeong.maprgbutils.RgbMapCanvasAdapter`: MapCanvas `DrawableCanvas` / `BufferedImage` 전환 유틸
+- `kim.biryeong.maprgbutils.api.RgbMapCodec`: 64x64 `0xRRGGBB` <-> 128x128 map index(0..127) 인코딩/디코딩 API
+- `kim.biryeong.maprgbutils.impl.RgbMapCodecImpl`: 참조 구현과 동일한 비트 배치 알고리즘 구현체
+- `kim.biryeong.maprgbutils.api.RgbMapPalette`: 128개 lookup 팔레트 및 디버그용 RGB 변환
+- `kim.biryeong.maprgbutils.api.RgbMapCanvasAdapter`: MapCanvas `DrawableCanvas` / `BufferedImage` 전환 유틸
+- `kim.biryeong.maprgbutils.api.RgbMapCombinedCanvasAdapter`: `CombinedPlayerCanvas` 탑레벨 인코딩 유틸
 - `assets/minecraft/shaders/core/rendertype_text.fsh`: `rgb_maps` 셰이더 파일 포함
 
 ## 사용 절차
@@ -40,10 +41,10 @@ for (int i = 0; i < mapIndexes.length; i++) {
 
 ```java
 // BufferedImage -> RGB 인코딩 멀티맵 (원본 표시 크기 유지)
-CombinedPlayerCanvas rgbCombined = RgbMapCanvasAdapter.encodeImageToRgbMapCombinedCanvas(sourceImage);
+CombinedPlayerCanvas rgbCombined = RgbMapCombinedCanvasAdapter.encodeImageToRgbMapCombinedCanvas(sourceImage);
 
 // DrawableCanvas -> RGB 인코딩 멀티맵
-CombinedPlayerCanvas rgbFromCanvas = RgbMapCanvasAdapter.encodeCanvasToRgbMapCombinedCanvas(sourceCanvas);
+CombinedPlayerCanvas rgbFromCanvas = RgbMapCombinedCanvasAdapter.encodeCanvasToRgbMapCombinedCanvas(sourceCanvas);
 ```
 
 ## 참고

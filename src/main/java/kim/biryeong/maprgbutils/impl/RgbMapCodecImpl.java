@@ -1,7 +1,9 @@
-package kim.biryeong.maprgbutils;
+package kim.biryeong.maprgbutils.impl;
+
+import kim.biryeong.maprgbutils.api.RgbMapCodec;
 
 public final class RgbMapCodecImpl implements RgbMapCodec {
-    static final RgbMapCodecImpl INSTANCE = new RgbMapCodecImpl();
+    public static final RgbMapCodec INSTANCE = new RgbMapCodecImpl();
 
     public RgbMapCodecImpl() {
     }

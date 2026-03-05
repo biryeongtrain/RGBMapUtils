@@ -1,6 +1,7 @@
 package kim.biryeong.maprgbutils;
 
 import eu.pb4.mapcanvas.api.core.CanvasColor;
+import kim.biryeong.maprgbutils.api.RgbMapPalette;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

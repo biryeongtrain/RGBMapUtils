@@ -3,6 +3,10 @@ package kim.biryeong.maprgbutils;
 import eu.pb4.mapcanvas.api.core.CanvasImage;
 import eu.pb4.mapcanvas.api.core.CombinedPlayerCanvas;
 import eu.pb4.mapcanvas.api.core.DrawableCanvas;
+import kim.biryeong.maprgbutils.api.RgbMapCanvasAdapter;
+import kim.biryeong.maprgbutils.api.RgbMapCodec;
+import kim.biryeong.maprgbutils.api.RgbMapCombinedCanvasAdapter;
+import kim.biryeong.maprgbutils.api.RgbMapPalette;
 import org.junit.jupiter.api.Test;
 
 import java.awt.image.BufferedImage;
@@ -168,10 +172,10 @@ class RgbMapCodecImplTest {
             }
         }
 
-        CombinedPlayerCanvas encodedFromImage = RgbMapCanvasAdapter.encodeImageToRgbMapCombinedCanvas(image, codec);
+        CombinedPlayerCanvas encodedFromImage = RgbMapCombinedCanvasAdapter.encodeImageToRgbMapCombinedCanvas(image, codec);
         CanvasImage sourceCanvas = CanvasImage.from(image);
-        CombinedPlayerCanvas encodedFromCanvas = RgbMapCanvasAdapter.encodeCanvasToRgbMapCombinedCanvas(sourceCanvas, codec);
-        CombinedPlayerCanvas encodedFromCanvasImage = RgbMapCanvasAdapter.encodeImageToRgbMapCombinedCanvas(
+        CombinedPlayerCanvas encodedFromCanvas = RgbMapCombinedCanvasAdapter.encodeCanvasToRgbMapCombinedCanvas(sourceCanvas, codec);
+        CombinedPlayerCanvas encodedFromCanvasImage = RgbMapCombinedCanvasAdapter.encodeImageToRgbMapCombinedCanvas(
                 RgbMapCanvasAdapter.drawableCanvasToBufferedImage(sourceCanvas),
                 codec
         );
@@ -193,6 +197,36 @@ class RgbMapCodecImplTest {
             encodedFromImage.destroy();
             encodedFromCanvas.destroy();
             encodedFromCanvasImage.destroy();
+        }
+    }
+
+    @Test
+    void combinedCanvasDoesNotStretchRemainderTile() {
+        BufferedImage image = new BufferedImage(129, 128, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                image.setRGB(x, y, 0x112233);
+            }
+        }
+
+        CombinedPlayerCanvas encoded = RgbMapCombinedCanvasAdapter.encodeImageToRgbMapCombinedCanvas(image, codec);
+        try {
+            assertEquals(2, encoded.getSectionsWidth());
+            assertEquals(1, encoded.getSectionsHeight());
+
+            DrawableCanvas remainderTile = encoded.getSubCanvas(1, 0);
+            assertNotNull(remainderTile);
+
+            int[] remainderIndexes = RgbMapCanvasAdapter.drawableCanvasToMapIndexes(remainderTile);
+            BufferedImage decodedTile = codec.decodeMapIndexesToImage(remainderIndexes);
+
+            for (int y = 0; y < RgbMapCodec.RGB_HEIGHT; y++) {
+                assertEquals(0x112233, decodedTile.getRGB(0, y) & 0x00FFFFFF);
+                assertEquals(0x000000, decodedTile.getRGB(1, y) & 0x00FFFFFF);
+                assertEquals(0x000000, decodedTile.getRGB(RgbMapCodec.RGB_WIDTH - 1, y) & 0x00FFFFFF);
+            }
+        } finally {
+            encoded.destroy();
         }
     }
 }

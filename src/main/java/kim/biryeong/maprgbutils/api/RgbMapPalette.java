@@ -1,11 +1,17 @@
-package kim.biryeong.maprgbutils;
+package kim.biryeong.maprgbutils.api;
+
+import kim.biryeong.maprgbutils.impl.RgbMapValidation;
 
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Palette lookup for the 128 colors used by the RGB map encoding.
+ */
 public final class RgbMapPalette {
+    /** Fixed palette size for RGB map indexes. */
     public static final int LOOKUP_SIZE = 128;
 
     private static final int[] DEFAULT_LOOKUP = {
@@ -144,6 +150,11 @@ public final class RgbMapPalette {
     private final int[] rgbByIndex;
     private final Map<Integer, Integer> indexByRgb;
 
+    /**
+     * Creates a palette from a 128-entry RGB lookup table.
+     *
+     * @param rgbLookup128 lookup values in {@code 0xRRGGBB} format, length must be {@link #LOOKUP_SIZE}
+     */
     public RgbMapPalette(int[] rgbLookup128) {
         if (rgbLookup128 == null) {
             throw new IllegalArgumentException("rgbLookup128 must not be null");
@@ -162,14 +173,28 @@ public final class RgbMapPalette {
         }
     }
 
+    /**
+     * Returns the built-in {@code rgb_maps} palette.
+     *
+     * @return singleton palette instance
+     */
     public static RgbMapPalette rgbMaps() {
         return RGB_MAPS;
     }
 
+    /**
+     * @return number of colors in this palette (always {@value #LOOKUP_SIZE})
+     */
     public int size() {
         return LOOKUP_SIZE;
     }
 
+    /**
+     * Returns the RGB value for a palette index.
+     *
+     * @param index0to127 palette index in {@code 0..127}
+     * @return color in {@code 0xRRGGBB} format
+     */
     public int rgbAt(int index0to127) {
         if (index0to127 < 0 || index0to127 >= LOOKUP_SIZE) {
             throw new IllegalArgumentException("index0to127 must be in range 0..127, but was " + index0to127);
@@ -177,15 +202,33 @@ public final class RgbMapPalette {
         return this.rgbByIndex[index0to127];
     }
 
+    /**
+     * Returns the ARGB value for a palette index with alpha forced to {@code 0xFF}.
+     *
+     * @param index0to127 palette index in {@code 0..127}
+     * @return color in {@code 0xAARRGGBB} format
+     */
     public int argbAt(int index0to127) {
         return 0xFF000000 | rgbAt(index0to127);
     }
 
+    /**
+     * Finds the exact palette index for an RGB value.
+     *
+     * @param rgb color in {@code 0xRRGGBB} format
+     * @return index in {@code 0..127}, or {@code -1} if not present
+     */
     public int findIndexExact(int rgb) {
         Integer index = this.indexByRgb.get(rgb & 0x00FFFFFF);
         return index == null ? -1 : index;
     }
 
+    /**
+     * Renders map indexes to a debug image using this palette.
+     *
+     * @param mapIndexes128x128 map index array, length must be {@link RgbMapCodec#MAP_INDEX_COUNT}
+     * @return debug image with size {@code 128x128}
+     */
     public BufferedImage toDebugImage(int[] mapIndexes128x128) {
         RgbMapValidation.requireMapIndexArray(mapIndexes128x128, "mapIndexes128x128");
 

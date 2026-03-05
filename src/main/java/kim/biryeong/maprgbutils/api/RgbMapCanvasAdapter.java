@@ -1,23 +1,43 @@
-package kim.biryeong.maprgbutils;
+package kim.biryeong.maprgbutils.api;
 
 import eu.pb4.mapcanvas.api.core.CanvasImage;
-import eu.pb4.mapcanvas.api.core.CombinedPlayerCanvas;
 import eu.pb4.mapcanvas.api.core.DrawableCanvas;
 import eu.pb4.mapcanvas.api.utils.CanvasUtils;
+import kim.biryeong.maprgbutils.impl.RgbMapValidation;
 
 import java.awt.image.BufferedImage;
 import java.util.Locale;
 
+/**
+ * Adapter utilities for converting between RGB-map index data, {@link DrawableCanvas},
+ * and {@link BufferedImage}.
+ * <p>
+ * This class handles single-map conversions (64x64 RGB <-> 128x128 map index canvas).
+ * Multi-map top-level workflows are available in {@link RgbMapCombinedCanvasAdapter}.
+ */
 public final class RgbMapCanvasAdapter {
     private static final int MAP_COLOR_OFFSET = 4;
 
     private RgbMapCanvasAdapter() {
     }
 
+    /**
+     * Encodes a {@code 64x64} image into a map-index {@link CanvasImage} using the default codec.
+     *
+     * @param image64x64 source image, must be {@code 64x64}
+     * @return encoded canvas image with size {@code 128x128}
+     */
     public static CanvasImage encodeImageToRgbMapCanvas(BufferedImage image64x64) {
         return encodeImageToRgbMapCanvas(image64x64, RgbMapCodec.createDefault());
     }
 
+    /**
+     * Encodes a {@code 64x64} image into a map-index {@link CanvasImage}.
+     *
+     * @param image64x64 source image, must be {@code 64x64}
+     * @param codec codec implementation to use
+     * @return encoded canvas image with size {@code 128x128}
+     */
     public static CanvasImage encodeImageToRgbMapCanvas(BufferedImage image64x64, RgbMapCodec codec) {
         if (codec == null) {
             throw new IllegalArgumentException("codec must not be null");
@@ -27,10 +47,23 @@ public final class RgbMapCanvasAdapter {
         return mapIndexesToDrawableCanvas(mapIndexes);
     }
 
+    /**
+     * Encodes a {@code 64x64} canvas into a map-index {@link CanvasImage} using the default codec.
+     *
+     * @param canvas64x64 source canvas, must be {@code 64x64}
+     * @return encoded canvas image with size {@code 128x128}
+     */
     public static CanvasImage encodeCanvasToRgbMapCanvas(DrawableCanvas canvas64x64) {
         return encodeCanvasToRgbMapCanvas(canvas64x64, RgbMapCodec.createDefault());
     }
 
+    /**
+     * Encodes a {@code 64x64} canvas into a map-index {@link CanvasImage}.
+     *
+     * @param canvas64x64 source canvas, must be {@code 64x64}
+     * @param codec codec implementation to use
+     * @return encoded canvas image with size {@code 128x128}
+     */
     public static CanvasImage encodeCanvasToRgbMapCanvas(DrawableCanvas canvas64x64, RgbMapCodec codec) {
         if (codec == null) {
             throw new IllegalArgumentException("codec must not be null");
@@ -39,53 +72,14 @@ public final class RgbMapCanvasAdapter {
         return encodeImageToRgbMapCanvas(drawableCanvasToBufferedImage(canvas64x64), codec);
     }
 
-    public static CombinedPlayerCanvas encodeImageToRgbMapCombinedCanvas(BufferedImage sourceImage) {
-        return encodeImageToRgbMapCombinedCanvas(sourceImage, RgbMapCodec.createDefault());
-    }
-
-    public static CombinedPlayerCanvas encodeImageToRgbMapCombinedCanvas(BufferedImage sourceImage, RgbMapCodec codec) {
-        if (codec == null) {
-            throw new IllegalArgumentException("codec must not be null");
-        }
-        if (sourceImage == null) {
-            throw new IllegalArgumentException("sourceImage must not be null");
-        }
-
-        int sectionsWidth = sectionsFor(sourceImage.getWidth(), RgbMapCodec.MAP_WIDTH);
-        int sectionsHeight = sectionsFor(sourceImage.getHeight(), RgbMapCodec.MAP_HEIGHT);
-        CombinedPlayerCanvas combinedCanvas = DrawableCanvas.create(sectionsWidth, sectionsHeight);
-
-        for (int sectionY = 0; sectionY < sectionsHeight; sectionY++) {
-            for (int sectionX = 0; sectionX < sectionsWidth; sectionX++) {
-                BufferedImage tile64x64 = sampleRegionTo64x64(
-                        sourceImage,
-                        sectionX * RgbMapCodec.MAP_WIDTH,
-                        sectionY * RgbMapCodec.MAP_HEIGHT
-                );
-                CanvasImage encodedTile = encodeImageToRgbMapCanvas(tile64x64, codec);
-                CanvasUtils.draw(
-                        combinedCanvas,
-                        sectionX * RgbMapCodec.MAP_WIDTH,
-                        sectionY * RgbMapCodec.MAP_HEIGHT,
-                        encodedTile
-                );
-            }
-        }
-
-        return combinedCanvas;
-    }
-
-    public static CombinedPlayerCanvas encodeCanvasToRgbMapCombinedCanvas(DrawableCanvas sourceCanvas) {
-        return encodeCanvasToRgbMapCombinedCanvas(sourceCanvas, RgbMapCodec.createDefault());
-    }
-
-    public static CombinedPlayerCanvas encodeCanvasToRgbMapCombinedCanvas(DrawableCanvas sourceCanvas, RgbMapCodec codec) {
-        if (sourceCanvas == null) {
-            throw new IllegalArgumentException("sourceCanvas must not be null");
-        }
-        return encodeImageToRgbMapCombinedCanvas(drawableCanvasToBufferedImage(sourceCanvas), codec);
-    }
-
+    /**
+     * Converts map indexes ({@code 0..127}) to a drawable {@code 128x128} canvas.
+     * <p>
+     * Output uses Minecraft raw map color values where index {@code 0..127} is stored as {@code index + 4}.
+     *
+     * @param mapIndexes128x128 map index array, length must be {@link RgbMapCodec#MAP_INDEX_COUNT}
+     * @return canvas image with size {@code 128x128}
+     */
     public static CanvasImage mapIndexesToDrawableCanvas(int[] mapIndexes128x128) {
         RgbMapValidation.requireMapIndexArray(mapIndexes128x128, "mapIndexes128x128");
 
@@ -101,6 +95,14 @@ public final class RgbMapCanvasAdapter {
         return canvas;
     }
 
+    /**
+     * Converts a drawable {@code 128x128} canvas into map indexes ({@code 0..127}).
+     * <p>
+     * Input is expected to use Minecraft raw map color values where effective map indexes are {@code raw - 4}.
+     *
+     * @param canvas128x128 source canvas, must be {@code 128x128}
+     * @return map index array, length {@link RgbMapCodec#MAP_INDEX_COUNT}
+     */
     public static int[] drawableCanvasToMapIndexes(DrawableCanvas canvas128x128) {
         RgbMapValidation.requireCanvasSize(canvas128x128, RgbMapCodec.MAP_WIDTH, RgbMapCodec.MAP_HEIGHT, "canvas128x128");
 
@@ -117,6 +119,13 @@ public final class RgbMapCanvasAdapter {
         return out;
     }
 
+    /**
+     * Converts a map index array to a palette-colored debug image ({@code 128x128}).
+     *
+     * @param mapIndexes128x128 map index array, length must be {@link RgbMapCodec#MAP_INDEX_COUNT}
+     * @param palette palette used to resolve each index to RGB
+     * @return palette-colored image in {@link BufferedImage#TYPE_INT_RGB} format
+     */
     public static BufferedImage mapIndexesToPaletteImage(int[] mapIndexes128x128, RgbMapPalette palette) {
         if (palette == null) {
             throw new IllegalArgumentException("palette must not be null");
@@ -134,6 +143,13 @@ public final class RgbMapCanvasAdapter {
         return image;
     }
 
+    /**
+     * Converts a palette image ({@code 128x128}) back to map indexes using exact RGB matching.
+     *
+     * @param image128x128 source image, must be {@code 128x128}
+     * @param palette palette used for exact lookup
+     * @return map index array, length {@link RgbMapCodec#MAP_INDEX_COUNT}
+     */
     public static int[] paletteImageToMapIndexes(BufferedImage image128x128, RgbMapPalette palette) {
         if (palette == null) {
             throw new IllegalArgumentException("palette must not be null");
@@ -158,6 +174,12 @@ public final class RgbMapCanvasAdapter {
         return mapIndexes;
     }
 
+    /**
+     * Wraps a {@link BufferedImage} as a {@link CanvasImage}.
+     *
+     * @param image source image
+     * @return canvas image representation of the source
+     */
     public static CanvasImage bufferedImageToDrawableCanvas(BufferedImage image) {
         if (image == null) {
             throw new IllegalArgumentException("image must not be null");
@@ -165,39 +187,17 @@ public final class RgbMapCanvasAdapter {
         return CanvasImage.from(image);
     }
 
+    /**
+     * Renders a {@link DrawableCanvas} into a {@link BufferedImage}.
+     *
+     * @param canvas source canvas
+     * @return rendered image in {@link BufferedImage#TYPE_INT_ARGB} compatible data produced by MapCanvas
+     */
     public static BufferedImage drawableCanvasToBufferedImage(DrawableCanvas canvas) {
         if (canvas == null) {
             throw new IllegalArgumentException("canvas must not be null");
         }
         return CanvasUtils.toImage(canvas);
-    }
-
-    private static int sectionsFor(int size, int sectionSize) {
-        return Math.max(1, (size + sectionSize - 1) / sectionSize);
-    }
-
-    private static BufferedImage sampleRegionTo64x64(BufferedImage sourceImage, int sourceStartX, int sourceStartY) {
-        BufferedImage sampled = new BufferedImage(RgbMapCodec.RGB_WIDTH, RgbMapCodec.RGB_HEIGHT, BufferedImage.TYPE_INT_RGB);
-
-        int sourceRegionWidth = Math.max(0, Math.min(RgbMapCodec.MAP_WIDTH, sourceImage.getWidth() - sourceStartX));
-        int sourceRegionHeight = Math.max(0, Math.min(RgbMapCodec.MAP_HEIGHT, sourceImage.getHeight() - sourceStartY));
-
-        if (sourceRegionWidth == 0 || sourceRegionHeight == 0) {
-            return sampled;
-        }
-
-        for (int y = 0; y < RgbMapCodec.RGB_HEIGHT; y++) {
-            int sourceOffsetY = Math.min(sourceRegionHeight - 1, (y * sourceRegionHeight) / RgbMapCodec.RGB_HEIGHT);
-            int sourceY = sourceStartY + sourceOffsetY;
-
-            for (int x = 0; x < RgbMapCodec.RGB_WIDTH; x++) {
-                int sourceOffsetX = Math.min(sourceRegionWidth - 1, (x * sourceRegionWidth) / RgbMapCodec.RGB_WIDTH);
-                int sourceX = sourceStartX + sourceOffsetX;
-                sampled.setRGB(x, y, sourceImage.getRGB(sourceX, sourceY));
-            }
-        }
-
-        return sampled;
     }
 
     private static String toHex(int rgb) {
