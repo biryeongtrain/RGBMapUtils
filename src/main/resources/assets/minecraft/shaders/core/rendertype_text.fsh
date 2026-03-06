@@ -91,6 +91,18 @@ bool isNearI11(vec4 sampledColor, float maxDistance) {
     return bestIndex < 8 && bestDistance <= maxDistance;
 }
 
+bool isOpaque(vec4 sampledColor) {
+    return sampledColor.a >= 0.99;
+}
+
+bool blockIsOpaque(sampler2D samplerTex, ivec2 origin, ivec2 texSize) {
+    ivec2 clampedOrigin = clamp(origin, ivec2(0), texSize - ivec2(2));
+    return isOpaque(texelFetch(samplerTex, clampedOrigin, 0))
+           && isOpaque(texelFetch(samplerTex, clampedOrigin + ivec2(1, 0), 0))
+           && isOpaque(texelFetch(samplerTex, clampedOrigin + ivec2(0, 1), 0))
+           && isOpaque(texelFetch(samplerTex, clampedOrigin + ivec2(1, 1), 0));
+}
+
 int i11Score(sampler2D samplerTex, ivec2 origin, ivec2 texSize, float maxDistance) {
     ivec2 minCoord = ivec2(0);
     ivec2 maxOrigin = texSize - ivec2(2);
@@ -103,6 +115,36 @@ int i11Score(sampler2D samplerTex, ivec2 origin, ivec2 texSize, float maxDistanc
     score += isNearI11(texelFetch(samplerTex, o1 + ivec2(1, 1), 0), maxDistance) ? 1 : 0;
     score += isNearI11(texelFetch(samplerTex, o2 + ivec2(1, 1), 0), maxDistance) ? 1 : 0;
     return score;
+}
+
+int i11Available(sampler2D samplerTex, ivec2 origin, ivec2 texSize) {
+    ivec2 minCoord = ivec2(0);
+    ivec2 maxOrigin = texSize - ivec2(2);
+    ivec2 o0 = clamp(origin, minCoord, maxOrigin);
+    ivec2 o1 = clamp(origin + ivec2(2, 0), minCoord, maxOrigin);
+    ivec2 o2 = clamp(origin + ivec2(0, 2), minCoord, maxOrigin);
+
+    int available = 0;
+    available += isOpaque(texelFetch(samplerTex, o0 + ivec2(1, 1), 0)) ? 1 : 0;
+    available += isOpaque(texelFetch(samplerTex, o1 + ivec2(1, 1), 0)) ? 1 : 0;
+    available += isOpaque(texelFetch(samplerTex, o2 + ivec2(1, 1), 0)) ? 1 : 0;
+    return available;
+}
+
+int candidateScore(sampler2D samplerTex, ivec2 origin, ivec2 texSize) {
+    ivec2 clampedOrigin = clamp(origin, ivec2(0), texSize - ivec2(2));
+    if (!isNearI11(texelFetch(samplerTex, clampedOrigin + ivec2(1, 1), 0), 256.0)) {
+        return -1;
+    }
+
+    int available = i11Available(samplerTex, clampedOrigin, texSize);
+    if (available <= 0) {
+        return -1;
+    }
+
+    int score = i11Score(samplerTex, clampedOrigin, texSize, 256.0);
+    int requiredScore = min(3, available);
+    return score >= requiredScore ? score : -1;
 }
 
 bool findBlockOrigin(sampler2D samplerTex, ivec2 pixel, ivec2 texSize, out ivec2 originOut) {
@@ -123,31 +165,31 @@ bool findBlockOrigin(sampler2D samplerTex, ivec2 pixel, ivec2 texSize, out ivec2
     int bestScore = -1;
     ivec2 bestOrigin = candidate0;
 
-    int score0 = i11Score(samplerTex, candidate0, texSize, 256.0);
+    int score0 = candidateScore(samplerTex, candidate0, texSize);
     if (score0 > bestScore) {
         bestScore = score0;
         bestOrigin = candidate0;
     }
 
-    int score1 = i11Score(samplerTex, candidate1, texSize, 256.0);
+    int score1 = candidateScore(samplerTex, candidate1, texSize);
     if (score1 > bestScore) {
         bestScore = score1;
         bestOrigin = candidate1;
     }
 
-    int score2 = i11Score(samplerTex, candidate2, texSize, 256.0);
+    int score2 = candidateScore(samplerTex, candidate2, texSize);
     if (score2 > bestScore) {
         bestScore = score2;
         bestOrigin = candidate2;
     }
 
-    int score3 = i11Score(samplerTex, candidate3, texSize, 256.0);
+    int score3 = candidateScore(samplerTex, candidate3, texSize);
     if (score3 > bestScore) {
         bestScore = score3;
         bestOrigin = candidate3;
     }
 
-    if (bestScore < 3) {
+    if (bestScore < 0) {
         return false;
     }
 
@@ -163,31 +205,40 @@ bool isRgbMapEncoded(sampler2D samplerTex) {
 
     ivec2 center = clamp(texSize / 2, ivec2(0), texSize - ivec2(1));
     ivec2 origin;
-    return findBlockOrigin(samplerTex, center, texSize, origin);
+    if (findBlockOrigin(samplerTex, center, texSize, origin)) {
+        return true;
+    }
+
+    ivec2 topLeft = ivec2(1, 1);
+    if (findBlockOrigin(samplerTex, topLeft, texSize, origin)) {
+        return true;
+    }
+
+    ivec2 topRight = ivec2(texSize.x - 2, 1);
+    if (findBlockOrigin(samplerTex, topRight, texSize, origin)) {
+        return true;
+    }
+
+    ivec2 bottomLeft = ivec2(1, texSize.y - 2);
+    return findBlockOrigin(samplerTex, bottomLeft, texSize, origin);
 }
 
 void main() {
     vec4 color = texture(Sampler0, texCoord0);
     ivec2 texSize = textureSize(Sampler0, 0).xy;
-    if (isRgbMapEncoded(Sampler0)) {
-        ivec2 pixel = ivec2(floor(texCoord0 * vec2(texSize)));
+    if (isOpaque(color) && isRgbMapEncoded(Sampler0)) {
+        ivec2 pixel = clamp(ivec2(floor(texCoord0 * vec2(texSize))), ivec2(0), texSize - ivec2(1));
         ivec2 coord;
-        if (!findBlockOrigin(Sampler0, pixel, texSize, coord)) {
-            color *= vertexColor * ColorModulator;
-            if (color.a < 0.1) {
-                discard;
-            }
-            fragColor = linear_fog(color, vertexDistance, FogStart, FogEnd, FogColor);
-            return;
-        }
-        int b1 = decode7u(texelFetch(Sampler0, coord, 0).rgb);
-        int b2 = decode7u(texelFetch(Sampler0, coord + ivec2(1, 0), 0).rgb);
-        int b3 = decode7u(texelFetch(Sampler0, coord + ivec2(0, 1), 0).rgb);
-        int b4 = decode7u(texelFetch(Sampler0, coord + ivec2(1, 1), 0).rgb);
-        b1 |= (b4 & 1) << 7; b2 |= (b4 & 2) << 6; b3 |= (b4 & 4) << 5;
-        //int u24 = (b3 << 16) | (b2 << 8) | b1;
+        if (findBlockOrigin(Sampler0, pixel, texSize, coord) && blockIsOpaque(Sampler0, coord, texSize)) {
+            int b1 = decode7u(texelFetch(Sampler0, coord, 0).rgb);
+            int b2 = decode7u(texelFetch(Sampler0, coord + ivec2(1, 0), 0).rgb);
+            int b3 = decode7u(texelFetch(Sampler0, coord + ivec2(0, 1), 0).rgb);
+            int b4 = decode7u(texelFetch(Sampler0, coord + ivec2(1, 1), 0).rgb);
+            b1 |= (b4 & 1) << 7; b2 |= (b4 & 2) << 6; b3 |= (b4 & 4) << 5;
+            //int u24 = (b3 << 16) | (b2 << 8) | b1;
 
-        color = vec4(vec3(b3, b2, b1) / 255.0, 1.0);
+            color = vec4(vec3(b3, b2, b1) / 255.0, 1.0);
+        }
     }
     color *= vertexColor * ColorModulator;
     if (color.a < 0.1) {

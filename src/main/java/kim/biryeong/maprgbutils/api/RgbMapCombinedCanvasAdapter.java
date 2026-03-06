@@ -13,8 +13,8 @@ import java.awt.image.BufferedImage;
  * <p>
  * The source is split into {@code 128x128} map regions, each region is sampled to
  * {@code 64x64}, then encoded through {@link RgbMapCodec} into a map-compatible tile.
- * For edge regions smaller than {@code 128x128}, missing pixels are padded with black
- * instead of stretching the remaining source area.
+ * For edge regions smaller than {@code 128x128}, missing pixels are written as clear
+ * map pixels (raw color {@code 0}) instead of stretching the remaining source area.
  */
 public final class RgbMapCombinedCanvasAdapter {
     private RgbMapCombinedCanvasAdapter() {
@@ -51,12 +51,18 @@ public final class RgbMapCombinedCanvasAdapter {
 
         for (int sectionY = 0; sectionY < sectionsHeight; sectionY++) {
             for (int sectionX = 0; sectionX < sectionsWidth; sectionX++) {
+                int sourceStartX = sectionX * RgbMapCodec.MAP_WIDTH;
+                int sourceStartY = sectionY * RgbMapCodec.MAP_HEIGHT;
+                int sourceRegionWidth = Math.max(0, Math.min(RgbMapCodec.MAP_WIDTH, sourceImage.getWidth() - sourceStartX));
+                int sourceRegionHeight = Math.max(0, Math.min(RgbMapCodec.MAP_HEIGHT, sourceImage.getHeight() - sourceStartY));
+
                 BufferedImage tile64x64 = sampleRegionTo64x64(
                         sourceImage,
-                        sectionX * RgbMapCodec.MAP_WIDTH,
-                        sectionY * RgbMapCodec.MAP_HEIGHT
+                        sourceStartX,
+                        sourceStartY
                 );
                 CanvasImage encodedTile = RgbMapCanvasAdapter.encodeImageToRgbMapCanvas(tile64x64, codec);
+                applyTransparentPadding(encodedTile, sourceRegionWidth, sourceRegionHeight);
                 CanvasUtils.draw(
                         combinedCanvas,
                         sectionX * RgbMapCodec.MAP_WIDTH,
@@ -116,5 +122,19 @@ public final class RgbMapCombinedCanvasAdapter {
         }
 
         return sampled;
+    }
+
+    private static void applyTransparentPadding(CanvasImage encodedTile, int sourceRegionWidth, int sourceRegionHeight) {
+        if (sourceRegionWidth >= RgbMapCodec.MAP_WIDTH && sourceRegionHeight >= RgbMapCodec.MAP_HEIGHT) {
+            return;
+        }
+
+        for (int y = 0; y < RgbMapCodec.MAP_HEIGHT; y++) {
+            for (int x = 0; x < RgbMapCodec.MAP_WIDTH; x++) {
+                if (x >= sourceRegionWidth || y >= sourceRegionHeight) {
+                    encodedTile.setRaw(x, y, (byte) 0);
+                }
+            }
+        }
     }
 }

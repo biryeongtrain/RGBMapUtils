@@ -217,13 +217,10 @@ class RgbMapCodecImplTest {
             DrawableCanvas remainderTile = encoded.getSubCanvas(1, 0);
             assertNotNull(remainderTile);
 
-            int[] remainderIndexes = RgbMapCanvasAdapter.drawableCanvasToMapIndexes(remainderTile);
-            BufferedImage decodedTile = codec.decodeMapIndexesToImage(remainderIndexes);
-
-            for (int y = 0; y < RgbMapCodec.RGB_HEIGHT; y++) {
-                assertEquals(0x112233, decodedTile.getRGB(0, y) & 0x00FFFFFF);
-                assertEquals(0x000000, decodedTile.getRGB(1, y) & 0x00FFFFFF);
-                assertEquals(0x000000, decodedTile.getRGB(RgbMapCodec.RGB_WIDTH - 1, y) & 0x00FFFFFF);
+            for (int y = 0; y < RgbMapCodec.MAP_HEIGHT; y++) {
+                assertTrue(Byte.toUnsignedInt(remainderTile.getRaw(0, y)) > 0);
+                assertEquals(0, Byte.toUnsignedInt(remainderTile.getRaw(1, y)));
+                assertEquals(0, Byte.toUnsignedInt(remainderTile.getRaw(RgbMapCodec.MAP_WIDTH - 1, y)));
             }
         } finally {
             encoded.destroy();
